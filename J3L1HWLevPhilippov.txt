@@ -1,0 +1,281 @@
+
+import java.util.ArrayList;
+import java.util.Arrays;
+
+public class MainClass {
+
+    public static void main(String[] args) {
+        String[] testArr = {"A","B","C","D","E"};
+        System.out.println("Массив до изменения: " + Arrays.toString(testArr));
+        changeMethod(testArr, 0,4 );
+        System.out.println("Массив после изменения: " + Arrays.toString(testArr));
+        ArrayList list = arrayToAList(testArr);
+        System.out.println(list);
+
+        Box <Apple> appleBox = new Box<>();
+        Box <Orange> orangeBox1 = new Box<>();
+        Box <Orange> orangeBox2 = new Box<>();
+
+        for (int i = 0; i <60 ; i++) {
+            appleBox.addFruit(new Apple());
+            orangeBox1.addFruit(new Orange());
+        }
+
+        for (int i = 0; i <40; i++) {
+            orangeBox2.addFruit(new Orange());
+        }
+        appleBox.compare(orangeBox1);
+        appleBox.compare(orangeBox2);
+
+        orangeBox1.relocateFruits(orangeBox2);
+
+
+
+    }
+
+    public static <T> void changeMethod (T[] array, int srcElement, int destElement) {
+        T changebleElement = array[destElement];
+        array[destElement] = array[srcElement];
+        array[srcElement] = changebleElement;
+    }
+
+    public static <T> ArrayList<T> arrayToAList (T[] array) {
+        return new ArrayList<T>(Arrays.asList(array));
+    }
+
+}
+
+/**
+ 3. Большая задача:
+ Есть классы Fruit -> Apple, Orange (больше фруктов не надо);
+ Класс Box, в который можно складывать фрукты.
+ Коробки условно сортируются по типу фрукта, поэтому в одну коробку нельзя сложить и яблоки, и апельсины;
+ Для хранения фруктов внутри коробки можно использовать ArrayList;
+ Сделать метод getWeight(), который высчитывает вес коробки, зная количество фруктов и вес одного фрукта
+ (вес яблока – 1.0f, апельсина – 1.5f. Не важно, в каких это единицах);
+ Внутри класса Коробка сделать метод compare, который позволяет сравнить текущую коробку с той, которую подадут в
+ compare в качестве параметра, true – если она равны по весу, false – в противном случае
+ (коробки с яблоками мы можем сравнивать с коробками с апельсинами);
+ Написать метод, который позволяет пересыпать фрукты из текущей коробки в другую
+ (помним про сортировку фруктов: нельзя яблоки высыпать в коробку с апельсинами).
+ Соответственно, в текущей коробке фруктов не остается, а в другую перекидываются объекты, которые были в этой коробке;
+ Не забываем про метод добавления фрукта в коробку.
+ **/
+
+import java.util.ArrayList;
+
+public class Box <T extends Fruit & Definable> {
+    private ArrayList <T> fruitList;
+    private static int staticboxID;
+    private int boxID;
+    private StringBuilder boxtype;
+
+    public ArrayList<T> getFruitList() {
+        return fruitList;
+    }
+
+    public Box () {
+        fruitList = new ArrayList();
+        staticboxID++;
+        boxID = getStaticboxID();
+        boxtype = null;
+    }
+
+    public StringBuilder getBoxtype() {
+        return boxtype;
+    }
+
+    public static int getStaticboxID() {
+        return staticboxID;
+    }
+
+    public int getBoxID() {
+        return boxID;
+    }
+
+    public void addFruit(T fruit)
+        {
+            if (fruitList.isEmpty()) {
+                fruitList.add(fruit);
+                boxtype = boxTypeStringBuilder();
+                return;
+        }
+            fruitList.add(fruit);
+    }
+
+    public float boxWeight () {
+        float weightSum = 0;
+        for (T o: fruitList ) {
+            weightSum += o.getWeight();
+        }
+        return weightSum;
+    }
+
+    public void compare (Box <? extends Fruit> compBox) {
+        if (Math.abs(this.boxWeight() - compBox.boxWeight()) < 0.0001)
+            System.out.println("Масса коробки " + boxtype + boxID + " равна " + " массе коробки " + compBox.getBoxtype() + compBox.getBoxID());
+        System.out.println("Масса коробки " + boxtype + boxID  + " отличается от массы коробки " + compBox.getBoxtype() + compBox.getBoxID());
+    }
+
+    public void relocateFruits(Box <T> destBox) {
+        System.out.println("Количество фруктов в коробке " + boxtype + " " + boxID + " до перемещения " + " :" + fruitList.size());
+        System.out.println("Количество фруктов в коробке " + boxtype + " " + destBox.getBoxID() + " до перемещения " + " :" + destBox.getFruitList().size());
+
+        for (T o: fruitList) {
+            destBox.getFruitList().add(o);
+        }
+        fruitList.clear();
+
+        System.out.println("Количество фруктов в коробке " + boxtype + " " + boxID + " после перемещения " + " :" + fruitList.size());
+        System.out.println("Количество фруктов в коробке " + boxtype + " " + destBox.getBoxID() + " после перемещения " + " :" + destBox.getFruitList().size());
+
+    }
+
+    public StringBuilder boxTypeStringBuilder () {
+        StringBuilder str = new StringBuilder(10);
+        if (!fruitList.isEmpty()) {
+            if(fruitList.get(0) instanceof Apple) {
+                str.append("с яблоками");
+            }
+            else if (fruitList.get(0) instanceof Orange) {
+                str.append("с апельсинами");
+            }
+        }
+        return str;
+    }
+}
+
+/**
+ 3. Большая задача:
+ Есть классы Fruit -> Apple, Orange (больше фруктов не надо);
+ Класс Box, в который можно складывать фрукты.
+ Коробки условно сортируются по типу фрукта, поэтому в одну коробку нельзя сложить и яблоки, и апельсины;
+ Для хранения фруктов внутри коробки можно использовать ArrayList;
+ Сделать метод getWeight(), который высчитывает вес коробки, зная количество фруктов и вес одного фрукта
+ (вес яблока – 1.0f, апельсина – 1.5f. Не важно, в каких это единицах);
+ Внутри класса Коробка сделать метод compare, который позволяет сравнить текущую коробку с той, которую подадут в
+ compare в качестве параметра, true – если она равны по весу, false – в противном случае
+ (коробки с яблоками мы можем сравнивать с коробками с апельсинами);
+ Написать метод, который позволяет пересыпать фрукты из текущей коробки в другую
+ (помним про сортировку фруктов: нельзя яблоки высыпать в коробку с апельсинами).
+ Соответственно, в текущей коробке фруктов не остается, а в другую перекидываются объекты, которые были в этой коробке;
+ Не забываем про метод добавления фрукта в коробку.
+ **/
+
+import java.util.ArrayList;
+
+public class Box <T extends Fruit & Definable> {
+    private ArrayList <T> fruitList;
+    private static int staticboxID;
+    private int boxID;
+    private StringBuilder boxtype;
+
+    public ArrayList<T> getFruitList() {
+        return fruitList;
+    }
+
+    public Box () {
+        fruitList = new ArrayList();
+        staticboxID++;
+        boxID = getStaticboxID();
+        boxtype = null;
+    }
+
+    public StringBuilder getBoxtype() {
+        return boxtype;
+    }
+
+    public static int getStaticboxID() {
+        return staticboxID;
+    }
+
+    public int getBoxID() {
+        return boxID;
+    }
+
+    public void addFruit(T fruit)
+        {
+            if (fruitList.isEmpty()) {
+                fruitList.add(fruit);
+                boxtype = boxTypeStringBuilder();
+                return;
+        }
+            fruitList.add(fruit);
+    }
+
+    public float boxWeight () {
+        float weightSum = 0;
+        for (T o: fruitList ) {
+            weightSum += o.getWeight();
+        }
+        return weightSum;
+    }
+
+    public void compare (Box <? extends Fruit> compBox) {
+        if (Math.abs(this.boxWeight() - compBox.boxWeight()) < 0.0001)
+            System.out.println("Масса коробки " + boxtype + boxID + " равна " + " массе коробки " + compBox.getBoxtype() + compBox.getBoxID());
+        System.out.println("Масса коробки " + boxtype + boxID  + " отличается от массы коробки " + compBox.getBoxtype() + compBox.getBoxID());
+    }
+
+    public void relocateFruits(Box <T> destBox) {
+        System.out.println("Количество фруктов в коробке " + boxtype + " " + boxID + " до перемещения " + " :" + fruitList.size());
+        System.out.println("Количество фруктов в коробке " + boxtype + " " + destBox.getBoxID() + " до перемещения " + " :" + destBox.getFruitList().size());
+
+        for (T o: fruitList) {
+            destBox.getFruitList().add(o);
+        }
+        fruitList.clear();
+
+        System.out.println("Количество фруктов в коробке " + boxtype + " " + boxID + " после перемещения " + " :" + fruitList.size());
+        System.out.println("Количество фруктов в коробке " + boxtype + " " + destBox.getBoxID() + " после перемещения " + " :" + destBox.getFruitList().size());
+
+    }
+
+    public StringBuilder boxTypeStringBuilder () {
+        StringBuilder str = new StringBuilder(10);
+        if (!fruitList.isEmpty()) {
+            if(fruitList.get(0) instanceof Apple) {
+                str.append("с яблоками");
+            }
+            else if (fruitList.get(0) instanceof Orange) {
+                str.append("с апельсинами");
+            }
+        }
+        return str;
+    }
+}
+
+public class Fruit {
+    String type;
+    float weight;
+
+    public Fruit () {
+    }
+
+
+    public String getType() {
+        return type;
+    }
+
+    public float getWeight() {
+        return weight;
+    }
+}
+
+public class Apple extends Fruit implements Definable {
+
+     public Apple () {
+         type = "Apple";
+         weight = 1.0f;
+     }
+
+}
+
+public class Orange extends Fruit implements Definable {
+
+    public Orange(){
+        type = "Orange";
+        weight = 1.5f;
+    }
+}
+		
