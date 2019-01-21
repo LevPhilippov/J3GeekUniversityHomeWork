@@ -1,0 +1,86 @@
+В корневой папке проекта создана база данных clientsDB с таблицей chat, включающей 4 столбца: id, login, pass, nick; 
+Создан новый класс, заменяющий SimpleAuthServise:
+
+package com.geekbrains.server;
+
+import java.sql.*;
+
+public class BDAuthServise implements AuthService {
+
+    private static Connection connection;
+    private static Statement statement;
+    private static PreparedStatement ps;
+    private static PreparedStatement nickChangePS;
+
+    public static void connectionDB() throws SQLException, ClassNotFoundException {
+        Class.forName("org.sqlite.JDBC");
+        connection = DriverManager.getConnection("jdbc:sqlite:clientsDB.db");
+        statement = connection.createStatement();
+        ps = connection.prepareStatement("SELECT nick FROM chat WHERE name = ? AND pass= ?");
+        nickChangePS = connection.prepareStatement("UPDATE `chat` SET `nick`=? WHERE `nick`=?"); //
+
+    }
+
+
+    public BDAuthServise() {
+        try {
+            connectionDB();
+            System.out.println("Успешное подключение.");
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public String getNicknameByLoginAndPassword(String login, String password) {
+        return checkClientInBD(login, password);
+
+    }
+
+    //методы проверки валидности пары логин\пароль в БД.
+
+    public String checkClientInBD (String login, String pass) {
+        try {
+            ps.setString(1,login);
+            ps.setString(2,pass);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next())
+                return rs.getString("nick");
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public boolean nickChange (String newNick, String oldNick) {
+        try {
+            nickChangePS.setString(1,newNick);
+            nickChangePS.setString(2,oldNick);
+            if(nickChangePS.executeUpdate() == 1) {
+                return true;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+}
+
+
+Класс сервер поменялся в части замены SimpleAuthServise на BDAuthServise.
+
+
+
+Для замены Ника в  ClientHandler добавлены строки:
+
+if (msg.startsWith("/changeNickTo ")) { // /changeNickto Somewho
+                                String[] tokens = msg.split("\\s");
+                               if (server.getBdAuthService().nickChange(tokens[1], nickname)) {
+                                   nickname = tokens[1];
+                                   server.broadcastClientsList();
+                                }
+                            
+
+Работоспособность кода проверена.
