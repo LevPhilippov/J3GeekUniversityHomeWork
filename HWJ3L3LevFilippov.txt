@@ -1,0 +1,114 @@
+Создан новый класс в клиенте:
+ 
+package com.geekbrains.client;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+
+public class ChatLogger {
+
+//    PrintWriter printWriter;
+    OutputStreamWriter outputStreamWriter;
+    private String nick;
+    private static Callback callOnHistoryReset;
+
+    public static void setCallOnHistoryReset(Callback callOnHistoryReset) {
+        ChatLogger.callOnHistoryReset = callOnHistoryReset;
+    }
+
+    public ChatLogger(String nick) {
+        this.nick = nick;
+        try {
+            receiveLast100Messages();
+            createPrintWriter();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void createPrintWriter() throws Exception {
+        outputStreamWriter = new OutputStreamWriter(createLogFile());
+//        printWriter = new PrintWriter(createLogFile(nick));
+    }
+
+    public FileOutputStream createLogFile() throws Exception {
+        File logFile = new File("history_" + nick + ".txt");
+        if (!logFile.exists()){
+            logFile.createNewFile();
+            return new FileOutputStream(logFile, true);
+        }
+        return new FileOutputStream(logFile, true);
+    }
+
+    public void writeIt (String msg) {
+ //       printWriter.write(msg);
+        try {
+            outputStreamWriter.write(msg);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    public void flushAndClose() {
+        try {
+            outputStreamWriter.flush();
+            outputStreamWriter.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+//        this.printWriter.flush();
+//        this.printWriter.close();
+    }
+
+    public void receiveLast100Messages() throws Exception {
+        File logFile = new File("history_" + nick + ".txt");
+        if (logFile.exists()) {
+            ArrayList<String> historyList = new ArrayList<>();
+            BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(new FileInputStream(logFile), StandardCharsets.UTF_8));
+            String s;
+            while ((s = bufferedReader.readLine()) != null){
+                historyList.add(s + "\n");
+            }
+            int historySize = historyList.size();  //количество строк в истории
+            if (historySize > 100) {
+                for (int i = historySize-100; i <historySize ; i++) {
+                    callOnHistoryReset.callback(historyList.get(i));
+                }
+            } else if (historySize !=0) {
+                for (int i = 0; i <historyList.size() ; i++) {
+                    callOnHistoryReset.callback(historyList.get(i));
+                }
+            }
+        }
+        return;
+    }
+
+
+}
+
+
+Для создания экземпляра класса ChatLogger использован новый calllback в классе Network сразу после прохождения клиентом аунтефикации:
+callOnCreateLog.callback();
+
+Инициализация в  классе Controller: 
+
+        Network.setCallOnCreateLog(args -> {
+            chatLogger = new ChatLogger(nickname);
+        });
+
+Для печати 100 последних сообщений из ChatLogger использован ArrayList и создан callback в классе ChatLogger:   private static Callback callOnHistoryReset;
+
+Инициализация в  классе Controller: 
+
+        ChatLogger.setCallOnHistoryReset(args -> {
+            try {
+                String s = (String) args[0];
+                textArea.appendText(s);
+            } catch (IndexOutOfBoundsException e) {
+                System.out.println("Ошибка при обращении к массиву в CallOnHistoryReset");
+            }
+        });
+                  
+Все работает.
