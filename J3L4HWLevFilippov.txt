@@ -1,0 +1,439 @@
+ДЗ за 4-й урок.
+
+
+public class HomeWork {
+    /**
+    Создать три потока, каждый из которых выводит определенную букву (A, B и C)
+    5 раз (порядок – ABСABСABС). Используйте wait/notify/notifyAll.
+    */
+    private static volatile char currentLetter = 'A';
+    static Object mon = new Object();
+
+    public static void main(String[] args) {
+    new Thread(new MyThread()).start();
+        new Thread(()->{
+            try {
+                synchronized (mon) {
+                    for (int i = 0; i <6 ; i++) {
+                        while (currentLetter != 'A') {
+                            mon.wait();
+                        }
+                        System.out.print(currentLetter);
+                        currentLetter = 'B';
+                        mon.notifyAll();
+                    }
+                }
+
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+     }).start();
+        new Thread(()->{
+            try {
+                synchronized (mon) {
+                    for (int i = 0; i <6 ; i++) {
+                        while (currentLetter != 'B') {
+                            mon.wait();
+                        }
+                        System.out.print(currentLetter);
+                        currentLetter = 'C';
+                        mon.notifyAll();
+                    }
+                }
+
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }).start();
+        new Thread(()->{
+            try {
+                synchronized (mon) {
+                    for (int i = 0; i <6 ; i++) {
+                        while (currentLetter != 'C') {
+                            mon.wait();
+                        }
+                        System.out.print(currentLetter);
+                        currentLetter = 'A';
+                        mon.notifyAll();
+                    }
+                }
+
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }).start();
+
+    }
+}
+
+
+
+
+Обновил свою версию чата до актуальног уровня.
+К серверу прикручен ExecutorService. Из методов, запускающих свои собственные потоки этот функционал удален.
+Из ClientHandler удален запуск потоков.
+
+package lev.filippov.server;
+
+
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.Iterator;
+import java.util.Scanner;
+import java.util.Vector;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class Server {
+
+    private static int clientId = 0; // каждый новый ClientHandler увеличивает ее значение на 1 и присваивает его седе в качестве id;
+    private Vector<ClientHandler> clients;
+//    private ClientAuthService clientAuthService;
+    private DBAuthService dbAuthService;
+    private Vector<ClientHandler> unAuthorizedClients;
+    private final long disconectionTimeMillis = 60000;
+    private ExecutorService clientHandlerExecutorService;
+    private Server server;
+
+//    public ClientAuthService getClientAuthService() {
+//        return clientAuthService;
+//    }
+
+    public DBAuthService getDbAuthService() {
+        return dbAuthService;
+    }
+
+    public Server() {
+
+        server = this;
+        clients = new Vector<ClientHandler>();
+        dbAuthService = new DBAuthService();
+ //       clientAuthService = new ClientAuthService();
+        unAuthorizedClients = new Vector<ClientHandler>();
+        clientHandlerExecutorService = Executors.newCachedThreadPool();
+
+        try(ServerSocket serverSocket = new ServerSocket(8189)){
+            System.out.println("Сервер запущен");
+            clientHandlerExecutorService.execute(() -> {
+                //запустим новый поток для реализаии отправки сообщений из консоли пользователям
+                srvrMsgSndr();
+            });
+            clientHandlerExecutorService.execute(() -> {
+                // поток для отключения клиентов по тайм-ауту
+                timeOutDisconnectionService();
+            });
+
+            while (true) {
+                Socket socket = serverSocket.accept();
+                    clientHandlerExecutorService.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                new ClientHandler(server, socket);
+                                System.out.println("Подключился новый клиент");
+                            }
+                            catch (IOException e) {
+                                System.out.println("Не удалоcь создать обработчик клиента");
+                            }
+
+                        }
+                    });
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        clientHandlerExecutorService.shutdown();
+        dbAuthService.closeConnectionDB();
+        System.out.println("Server завершил работу");
+    }
+
+    public synchronized void broadcastMsg(ClientHandler sender, String msg) {
+            if (!clients.isEmpty()) {
+                msg = sender.getNick() + ": " + msg;
+                for (ClientHandler client: clients) {
+                    client.sendMsg(msg);
+                }
+            }
+    }
+
+    public synchronized void privateMsg(String msg, String toNick, ClientHandler fromNick ) {
+        if (!clients.isEmpty()) {
+            for (ClientHandler client: clients) {
+                if (client.getNick().equals(toNick)) {
+                    System.out.println("Совпадение ника при отправке личного сообщения");
+                    client.sendMsg("private from " + fromNick.getNick() + ": " + msg);
+                    fromNick.sendMsg("private to " + toNick + ": " + msg);
+                    return;
+                }
+            }
+        }
+        fromNick.sendMsg("Не найден клиент с именем " + toNick);
+    }
+
+    public void broadcastClienstList () {
+        StringBuilder sb = new StringBuilder(15*clients.size());
+        sb.append("/clients ");
+        for (ClientHandler client: clients) {
+            sb.append(client.getNick() + " ");
+        }
+        sb.setLength(sb.length()-1);
+        String out = sb.toString();
+        for (ClientHandler client: clients) {
+           client.sendMsg(out);
+        }
+
+    }
+
+    synchronized void subscribe (ClientHandler clientHandler) {
+        clients.add(clientHandler);
+        broadcastClienstList();
+    }
+
+    synchronized void addToUnauthorizedList (ClientHandler clientHandler) {
+        System.out.println("Клиент добавлен в неаторизованный лист");
+        unAuthorizedClients.add(clientHandler);
+    }
+    synchronized void deleteFromUnauthorizedList (ClientHandler clientHandler) {
+        unAuthorizedClients.remove(clientHandler);
+        System.out.println("Клиент удален из неавторизованного листа");
+    }
+
+    synchronized void unsubscribe (ClientHandler clientHandler) {
+        clients.remove(clientHandler);
+        broadcastClienstList();
+    }
+
+    public void srvrMsgSndr(){
+            System.out.println("Запущен консольный клиент для рассылки сообщений пользователям");
+            while (true) {
+                Scanner sc = new Scanner(System.in);
+                String serverMsg = sc.nextLine();
+                if (!clients.isEmpty()) {
+                    for (ClientHandler client: clients) {
+                        client.sendMsg("Server: " + serverMsg);
+                    }
+                }
+            }
+    }
+
+    public boolean isNickBusy (String nick) {
+        for(ClientHandler o: clients) {
+            if (o.getNick().equals(nick)) {
+                System.out.println("Этот никнейм уже занят");
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void timeOutDisconnectionService() {
+
+            Thread.currentThread().setName("MydisconnectionThread");
+            System.out.println("Время дисконнекта неактивного клиента: " + disconectionTimeMillis/1000 + " секунд");
+            while (true) {
+                try {
+                    System.out.println(Thread.currentThread().getName() + " уснул");
+                    Thread.sleep(20000);
+                    System.out.println(Thread.currentThread().getName() + " проснулся");
+                    if (!unAuthorizedClients.isEmpty()) {
+                        Iterator<ClientHandler> iterator = unAuthorizedClients.iterator();
+                        if (iterator.hasNext()) {
+                            ClientHandler o = iterator.next();
+                            System.out.println("Время до дисконнекта клиента: " + o.getIdNumber() +
+                                    " равно " + ((disconectionTimeMillis - (System.currentTimeMillis() - o.getConnectionTime()))));
+                            if ((System.currentTimeMillis() - o.getConnectionTime()) > disconectionTimeMillis) {
+                                o.sendMsg("/end");
+                                o.setCloseConnectionFlag(true);
+                                iterator.remove();
+                            }
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+    // методы для счетчика клиентов
+    synchronized void counterIncrement() {
+        clientId++;
+    }
+    synchronized public static int getClientId() {
+        return clientId;
+    }
+}
+
+
+package lev.filippov.server;
+
+
+import java.io.*;
+import java.net.Socket;
+import java.util.Timer;
+import java.util.TimerTask;
+
+public class ClientHandler {
+
+    DataInputStream in;
+    DataOutputStream out;
+    Server server;
+    Socket socket;
+    String nick;
+//    TimerTask disconnectByTimeOut;
+    Boolean closeConnectionFlag;
+    private long connectionTime;
+    private int id; // просто счетчик для каждого клиента, чтоб как-то отличать их до тех пор, пока у них нет ника
+
+    public int getIdNumber() {
+        return id;
+    }
+
+    public long getConnectionTime() {
+        return connectionTime;
+    }
+
+    public String getNick() {
+        return nick;
+    }
+
+    public void setCloseConnectionFlag(Boolean closeConnectionFlag) {
+        this.closeConnectionFlag = closeConnectionFlag;
+    }
+
+    public ClientHandler (Server server, Socket socket) throws IOException {
+
+            this.closeConnectionFlag = false;
+            this.server = server;
+            this.socket = socket;
+            this.in = new DataInputStream(socket.getInputStream());
+            this.out = new DataOutputStream(socket.getOutputStream());
+            server.counterIncrement();
+            this.id = server.getClientId();
+            this.connectionTime = System.currentTimeMillis();
+            server.addToUnauthorizedList(this);
+//            disconnectByTimeOut = new TimerTask() {
+//                @Override
+//                public void run() {
+//                    if (nick == null) {
+//                        sendMsg("/end");
+//                        closeConnectionFlag = true;
+//                        closeConnection();
+//                    }
+//                }
+//            };
+//            new Timer().schedule(disconnectByTimeOut, 5000);
+                    try {
+                        // блок авторизации
+                        while(!checkAuth());
+                        // блок обмена сообщениями
+                        while (!readMessage());
+                    } catch (IOException e) {
+                        if (closeConnectionFlag) System.out.println("Клиент отключен по таймауту");
+                        else e.printStackTrace();
+                    } finally {
+                        closeConnection();
+                    }
+    }
+    void sendMsg(String msg) {
+        try {
+            out.writeUTF(msg);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    void sendAuth(String msg) {
+        try {
+            out.writeUTF(msg);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    void closeConnection() {
+        sendMsg("You have been disconnected.");
+        System.out.println("Клиент отключился");
+        server.unsubscribe(this);
+        try {
+            in.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        try {
+            out.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        try {
+            socket.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private boolean checkAuth() throws IOException {
+            String msg = in.readUTF();
+            if (msg.startsWith("/auth ")) {
+                String[] tokens = msg.split("\\s");
+                nick = server.getDbAuthService().getNicknameByLoginAndPassword(tokens[1],tokens[2]);
+                if (nick != null && !server.isNickBusy(nick)) {
+                    System.out.println("Авторизация успешная");
+                    sendAuth("/authOK " + nick);
+                    System.out.println("Отправлен сигнал /authOK");
+                    server.deleteFromUnauthorizedList(this);
+                    server.subscribe(this);
+                    return true;
+                }
+            }
+           return false;
+    }
+    private boolean readMessage() throws IOException {
+        String msg = in.readUTF();
+            // системные и специальные сообщения
+            if (msg.startsWith("/")){
+
+                System.out.println(msg);
+
+                if (msg.equals("/end")) {
+                    sendMsg("/end");
+                    return false;
+                }
+                //личное сообщение
+                if (msg.startsWith("/w ")) {
+                    System.out.println("Отправка личного сообщения");
+                    String[] tokens = msg.split("\\s", 3);
+                    msg = tokens[2];
+                    server.privateMsg(msg, tokens[1], this);
+                    return false;
+                }
+                if (msg.startsWith("/changeMyNick ")) { // /changeNick Somewho
+                    String[] tokens = msg.split("\\s",2);
+
+                    if(tokens[1].contains(" ")) {
+                        sendMsg("Server: Ник не может содержать пробелов!");
+                        return false;
+                    }
+
+                    if (server.getDbAuthService().isNickBusy(tokens[1])){
+                        sendMsg("Server: Этот ник уже занят!");
+                        return false;
+                    }
+
+                    if (server.getDbAuthService().nickChange(tokens[1], nick)) {
+                        nick = tokens[1];
+                        server.broadcastClienstList();
+                        return false;
+                    }
+                }
+                if(!msg.startsWith("/w ") && !msg.equals("/end") && !msg.startsWith("/changeMyNick ")) {
+                    sendMsg("Неизвестная команда!");
+                    return false;
+                }
+            } else server.broadcastMsg(this, msg);
+            return false;
+    }
+}
+

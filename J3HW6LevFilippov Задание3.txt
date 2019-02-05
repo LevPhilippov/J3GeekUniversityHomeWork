@@ -1,0 +1,58 @@
+Созданы 2 logger в классе server - один для сервера, один для клиентхэндлеров. Оба настроены.
+Содздан геттер для получения клиентского логгера в классе ClientHandler.
+Все сервисные sout заменены на логгирование в консоль и файл.
+
+public class Server {
+
+    private static int clientId = 0; // каждый новый ClientHandler увеличивает ее значение на 1 и присваивает его седе в качестве id;
+    private Vector<ClientHandler> clients;
+//    private ClientAuthService clientAuthService;
+    private DBAuthService dbAuthService;
+    private Vector<ClientHandler> unAuthorizedClients;
+    private final long disconectionTimeMillis = 60000;
+    private ExecutorService clientHandlerExecutorService;
+    private Server server;
+    private Logger logger;
+    private Logger clientLogger;
+
+
+//    public ClientAuthService getClientAuthService() {
+//        return clientAuthService;
+//    }
+
+    public DBAuthService getDbAuthService() {
+        return dbAuthService;
+    }
+
+    public Server() {
+
+        server = this;
+        clients = new Vector<ClientHandler>();
+        dbAuthService = new DBAuthService();
+ //       clientAuthService = new ClientAuthService();
+        unAuthorizedClients = new Vector<ClientHandler>();
+        clientHandlerExecutorService = Executors.newCachedThreadPool();
+        logger = Logger.getLogger(Server.class.getName());
+        clientLogger = Logger.getLogger("ClientLogger");
+
+        try {
+            Handler serverHandler = new FileHandler("server%log.log");
+            serverHandler.setLevel(Level.WARNING);
+            logger.addHandler(serverHandler);
+
+            Handler clientHandlerHandler = new FileHandler("client%log.log", true);
+            clientHandlerHandler.setLevel(Level.INFO);
+            clientHandlerHandler.setFormatter(new SimpleFormatter());
+      //      clientLogger.setUseParentHandlers(false);
+            clientLogger.addHandler(clientHandlerHandler);
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+.....
+
+    public Logger getClientLogger() {
+        return clientLogger;
+    }
+}
