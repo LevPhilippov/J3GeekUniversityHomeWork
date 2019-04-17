@@ -1,0 +1,197 @@
+package lev.filippov;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)
+
+public @interface Test {
+    int priority() default 5;
+}
+
+....
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)
+public @interface BeforeSuite {
+    String description() default "Предтестовый метод";
+}
+
+...
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)
+public @interface AfterSuite {
+    String description() default "Послетестовый метод";
+}
+
+...
+
+package lev.filippov;
+
+import java.lang.reflect.Method;
+
+public class TestClass{
+
+    public TestClass() {}
+
+    @Test (priority = 7)
+    public void test1() {
+        System.out.println("Test without params.7");
+    }
+    @Test (priority = 3)
+    public void test2() {
+        System.out.println("Private test without params.3");
+    }
+    @Test(priority = 4)
+    public void test3() {
+        System.out.println("Public test with param :4" );
+    }
+    @Test
+    public void test4() {
+        System.out.println("Public test with param and result.5");
+    }
+
+    @BeforeSuite
+    public void test5() {
+        System.out.println("I'm Aragorn, the son of Arathorn.");
+    }
+
+    @AfterSuite
+    public void test6() {
+        System.out.println("I'm Ghimly, the son of Ghloin.");
+    }
+
+}
+
+...
+
+package lev.filippov;
+/*
+ * Создать класс, который может выполнять «тесты».
+ * В качестве тестов выступают классы с наборами методов с аннотациями @Test.
+ * Для этого у него должен быть статический метод start(),
+ * которому в качестве параметра передается или объект типа Class, или имя класса.
+ * Из «класса-теста» вначале должен быть запущен метод с аннотацией @BeforeSuite,
+ * если такой имеется. Далее запущены методы с аннотациями @Test, а по завершении всех тестов –
+ * метод с аннотацией @AfterSuite. К каждому тесту необходимо добавить приоритеты (int числа от 1 до 10),
+ * в соответствии с которыми будет выбираться порядок их выполнения.
+ * Если приоритет одинаковый, то порядок не имеет значения.
+ * Методы с аннотациями @BeforeSuite и @AfterSuite должны присутствовать в единственном экземпляре,
+ * иначе необходимо бросить RuntimeException при запуске «тестирования».*/
+
+import java.lang.reflect.Method;
+import java.util.*;
+
+public class MainClass {
+
+    public static void main(String[] args) throws Exception {
+        start(TestClass.class);
+    }
+
+    public static <T> void  start(Class <T> c) throws Exception {
+        T obj = (T)c.newInstance();
+
+        Method[] classMethods = c.getDeclaredMethods();
+
+        boolean beforeSuite = false;
+        boolean afterSuite = false;
+
+        for (Method m: classMethods) {
+            if (m.isAnnotationPresent(BeforeSuite.class)) {
+                if (beforeSuite) throw new RuntimeException("More then single @BeforeSuite");
+                beforeSuite = true;
+                continue;
+            }
+            if (m.isAnnotationPresent(AfterSuite.class)) {
+                if (afterSuite) throw new RuntimeException("More then single @AfterSuite");
+                afterSuite = true;
+                continue;
+            }
+
+        }
+        List <Method> classList = Arrays.asList(classMethods); //вытаскивается в правильном порядке, но не всегда(
+
+        TreeSet<Method> ts = new TreeSet<>((o1, o2) -> {
+                if (o1.isAnnotationPresent(BeforeSuite.class) || o2.isAnnotationPresent(BeforeSuite.class) || o1.isAnnotationPresent(AfterSuite.class) || o1.isAnnotationPresent(AfterSuite.class)) {
+                    if (o1.isAnnotationPresent(BeforeSuite.class)) return -1;
+                    if (o1.isAnnotationPresent(AfterSuite.class)) return 1;
+                    if (o2.isAnnotationPresent(BeforeSuite.class)) return 1;
+                    if (o2.isAnnotationPresent(AfterSuite.class)) return -1;
+                }
+                if (o1.isAnnotationPresent(Test.class) && o2.isAnnotationPresent(Test.class)) {
+                    if (o1.getDeclaredAnnotation(Test.class).priority() < o2.getDeclaredAnnotation(Test.class).priority()) {
+                        return -1;
+                    }
+                    if (o1.getDeclaredAnnotation(Test.class).priority() > o2.getDeclaredAnnotation(Test.class).priority()) {
+                        return 1;
+                    }
+                }
+                return 0;
+            }); //сортируется удобнее всего.
+
+        ts.addAll(Arrays.asList(classMethods));
+
+        //Попробовал разные варианты сортировки:
+
+        Arrays.sort(classMethods, new Comparator<Method>() {
+            @Override
+            public int compare(Method o1, Method o2) {
+                if (o1.isAnnotationPresent(BeforeSuite.class) || o2.isAnnotationPresent(BeforeSuite.class) || o1.isAnnotationPresent(AfterSuite.class) || o1.isAnnotationPresent(AfterSuite.class)) {
+                    if (o1.isAnnotationPresent(BeforeSuite.class)) return -1;
+                    if (o1.isAnnotationPresent(AfterSuite.class)) return 1;
+                    if (o2.isAnnotationPresent(BeforeSuite.class)) return 1;
+                    if (o2.isAnnotationPresent(AfterSuite.class)) return -1;
+
+                }
+                if (o1.isAnnotationPresent(Test.class) && o2.isAnnotationPresent(Test.class)) {
+                    if (o1.getDeclaredAnnotation(Test.class).priority() < o2.getDeclaredAnnotation(Test.class).priority()) {
+                        return -1;
+                    }
+                    if (o1.getDeclaredAnnotation(Test.class).priority() > o2.getDeclaredAnnotation(Test.class).priority()) {
+                        return 1;
+                    }
+                }
+
+                return 0;            }
+        }); // сортируется всегда как попало:(
+        Collections.sort(classList, (o1, o2) -> {
+            if (o1.isAnnotationPresent(Test.class) && o2.isAnnotationPresent(Test.class)) {
+                if (o1.getDeclaredAnnotation(Test.class).priority() < o2.getDeclaredAnnotation(Test.class).priority()) {
+                    return -1;
+                }
+                if (o1.getDeclaredAnnotation(Test.class).priority() > o2.getDeclaredAnnotation(Test.class).priority()) {
+                    return 1;
+                }
+            }
+            if (o1.isAnnotationPresent(BeforeSuite.class) || o2.isAnnotationPresent(BeforeSuite.class)) {
+                if (o1.isAnnotationPresent(BeforeSuite.class)) return -1;
+                if (o2.isAnnotationPresent(BeforeSuite.class)) return 1;
+            }
+            if (o1.isAnnotationPresent(AfterSuite.class) || o1.isAnnotationPresent(AfterSuite.class))  {
+                if (o1.isAnnotationPresent(AfterSuite.class)) return 1;
+                if (o2.isAnnotationPresent(AfterSuite.class)) return -1;
+            }
+            return 0;
+        });
+
+        for (Method m: ts) {
+            if(m.isAnnotationPresent(BeforeSuite.class)) {
+                System.out.println(m.getDeclaredAnnotation(BeforeSuite.class).description());
+            }
+            if(m.isAnnotationPresent(AfterSuite.class)) {
+                System.out.println(m.getDeclaredAnnotation(AfterSuite.class).description());
+            }
+            if(m.isAnnotationPresent(Test.class)){
+                System.out.println("Выполняется метод с приоритетом:" + m.getDeclaredAnnotation(Test.class).priority());
+            }
+            m.invoke(obj);
+        }
+
+    }
+}
+
+
+
+
